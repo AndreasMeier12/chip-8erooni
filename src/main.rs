@@ -1,7 +1,7 @@
+use rand::Rng;
+
 
 fn main() {
-    let asdf: u8 = 255;
-
     println!("Hello, world!, %d", );
 }
 
@@ -51,34 +51,37 @@ struct InstructionType {}
 #[derive(Clone)]
 struct Chip8State {
     memory: Vec<u8>,
-    generalPurpose: Vec<u8>,
-    PC: u16,
-    SP: u8,
-    DT: u8,
-    ST: u8,
-    VF: bool,
-    I: u16,
-
+    general_purpose: Vec<u8>,
+    pc: u16,
+    sp: u8,
+    dt: u8,
+    st: u8,
+    vf: bool,
+    i: u16,
+    screen: Vec<bool>,
 }
 
 impl Chip8State {
     pub fn new() -> Chip8State {
         Chip8State{
             memory: vec![0; 4096],
-            generalPurpose:vec![0; 16],
-            PC: 0,
-            SP: 0,
-            DT: 0,
-            ST: 0,
-            VF: false,
-            I: 0,
+            general_purpose:vec![0; 16],
+            pc: 0,
+            sp: 0,
+            dt: 0,
+            st: 0,
+            vf: false,
+            i: 0,
+            screen: vec![false; 2048]
+
         }
+
 
     }
 
     pub fn handle_instruction(&mut self) -> () {
-        let cur_high = self.memory[self.PC as usize];
-        let cur_low = self.memory[(self.PC + 1) as usize];
+        let cur_high = self.memory[self.pc as usize];
+        let cur_low = self.memory[(self.pc + 1) as usize];
 
         if cur_high == 0{
             if cur_low == 0xE0 {
@@ -97,9 +100,9 @@ impl Chip8State {
         match cur_highest {
             1 => self.jump(cur_high, cur_low),
             2 => self.call(cur_low,cur_high),
-            3 => self.skipEqual(hilo, cur_low),
+            3 => self.skip_equal(hilo, cur_low),
             4 => self.skip_not_equal(hilo, cur_lowest),
-            5 => self.skip_vequal(hilo, lohi),
+            5 => self.skip_v_equal(hilo, lohi),
             6 => self.load_vx(hilo, cur_low),
             7 => self.add_byte(hilo, cur_low),
             8 => match cur_lowest {
@@ -127,11 +130,11 @@ impl Chip8State {
 
             },
             15 => match cur_low {
-                0x07 => self.load_from_DT(hilo),
+                0x07 => self.load_from_dt(hilo),
                 0x0a => self.load_key(hilo),
-                0x15 => self.load_to_DT(hilo),
-                0x18 => self.load_ST(hilo),
-                0x1E => self.add_I(hilo),
+                0x15 => self.load_to_dt(hilo),
+                0x18 => self.load_from_st(hilo),
+                0x1E => self.add_i(hilo),
                 0x29 => self.load_f_vx(hilo),
                 0x33 => self.load_b_vx(hilo),
                 0x55 => self.load_i_vx(hilo),
@@ -158,48 +161,49 @@ impl Chip8State {
     pub fn clear_screen(&mut self) -> () {}
 
     pub fn ret(&mut self) -> () {
-        self.PC = self.SP as u16;
-        self.SP = self.SP - 1;
+        self.pc = self.memory[self.sp as usize] as u16;
+        self.sp = self.sp - 1;
     }
 
-    pub fn sys(a: Chip8State) -> () {}
 
     pub fn jump(&mut self, l: u8, h: u8) -> () {
         let lo_ = l as u16;
-        let hi_ = get_lowest(l) as u16;
-        let new_address: u16 = (256 as u16 * hi_ as u16 + lo_ as u16 + self.generalPurpose[0] as u16) as u16;
-        self.PC = new_address;
+        let hi_ = get_lower(h) as u16;
+        let new_address: u16 = (256 as u16 * hi_ as u16 + lo_ as u16 + self.general_purpose[0] as u16) as u16;
+        self.pc = new_address;
     }
 
     pub fn jump_v0(&mut self, l: u8, h: u8) -> () {
         let lo_ = l as u16;
         let hi_ = get_lowest(l) as u16;
-        let new_address: u16 = (256 * hi_ + lo_ + self.generalPurpose[0] as u16) as u16;
-        self.PC = new_address;
+        let new_address: u16 = (256 * hi_ + lo_ + self.general_purpose[0] as u16) as u16;
+        self.pc = new_address;
     }
 
     pub fn call(&mut self, l: u8, h: u8) -> () {
-        let new_address: u16 = 256 * (get_lowest(h)as u16) + l as u16;
-        self.SP = self.SP + 1;
-        self.memory[self.SP as usize] = self.PC as u8;
-        self.PC = new_address as u16;
+        let h_ = h & 0x0F;
+        let new_address: u16 = 256 * (get_lower(h_)as u16) + l as u16;
+        println!("{}",256 * (get_lower(h_)as u16));
+        self.sp = self.sp + 1;
+        self.memory[self.sp as usize] = self.pc as u8;
+        self.pc = new_address as u16;
     }
 
-    pub fn skipEqual(&mut self, x: u8, kk: u8) -> () {
-        if self.generalPurpose[x as usize] == kk {
-            self.PC = self.PC + 2;
+    pub fn skip_equal(&mut self, x: u8, kk: u8) -> () {
+        if self.general_purpose[x as usize] == kk {
+            self.pc = self.pc + 2;
         }
     }
 
-    pub fn skip_not_equal(&mut self, kk: u8, x: u8) -> () {
-        if self.generalPurpose[x as usize] != kk {
-            self.PC = self.PC + 2;
+    pub fn skip_not_equal(&mut self, x: u8, kk: u8) -> () {
+        if self.general_purpose[x as usize] != kk {
+            self.pc = self.pc + 2;
         }
     }
 
-    pub fn skip_vequal(&mut self, x: u8, y: u8) -> () {
-        if self.generalPurpose[x as usize] == self.generalPurpose[y as usize] {
-            self.PC += 2;
+    pub fn skip_v_equal(&mut self, x: u8, y: u8) -> () {
+        if self.general_purpose[x as usize] == self.general_purpose[y as usize] {
+            self.pc += 2;
         }
     }
 
@@ -211,51 +215,60 @@ impl Chip8State {
         // find keyboard!
     }
 
-    pub fn load_vx(&mut self, x: u8, kk: u8) -> () {}
+    pub fn load_vx(&mut self, x: u8, kk: u8) -> () {
+        self.general_purpose[x as usize] = kk;
+    }
 
     pub fn load_key(&mut self, x: u8) {
         //stdin().read_line(&mut s).expect("Did not enter a correct string");
     }
 
-    pub fn load_from_DT(&mut self, x: u8) {
-        self.generalPurpose[x as usize] = self.DT;
+    pub fn load_from_dt(&mut self, x: u8) {
+        self.general_purpose[x as usize] = self.dt;
     }
 
-    pub fn load_to_DT(&mut self, x: u8){
-        self.DT = self.generalPurpose[x as usize];
+    pub fn load_to_dt(&mut self, x: u8){
+        self.dt = self.general_purpose[x as usize];
     }
 
-    pub fn load_ST(&mut self, x: u8) {
-        self.generalPurpose[x as usize] = self.ST;
+    pub fn load_from_st(&mut self, x: u8) {
+        self.general_purpose[x as usize] = self.st;
+    }
+
+    pub fn load_to_st(&mut self, x: u8) {
+        self.st = self.general_purpose[x as usize];
     }
 
     pub fn load_vx_vy(&mut self, x: u8, y: u8) -> () {
-        self.generalPurpose[x as usize] = self.generalPurpose[y as usize];
+        self.general_purpose[x as usize] = self.general_purpose[y as usize];
     }
 
-    pub fn add_I(&mut self, x: u8) -> () {
-        self.I = self.I + self.generalPurpose[x as usize] as u16;
+    pub fn add_i(&mut self, x: u8) -> () {
+        self.i = (self.i as u32 + self.general_purpose[x as usize] as u32) as u16;
     }
 
     pub fn add(&mut self, x: u8, y: u8) -> () {
-        let a: u8 = self.generalPurpose[x as usize];
-        let b: u8 = self.generalPurpose[y as usize];
+        let a: u8 = self.general_purpose[x as usize];
+        let b: u8 = self.general_purpose[y as usize];
         if get_highest(a) > 0 && get_highest(b) > 0 {
-            self.VF = true;
+            self.vf = true;
         }
-        self.generalPurpose[x as usize] = self.generalPurpose[x as usize] + self.generalPurpose[y as usize]
+        let x_ = self.general_purpose[x as usize] as i16;
+        let y_ = self.general_purpose[y as usize] as i16;
+
+        self.general_purpose[x as usize] = (x_ + y_) as u8;
     }
 
     pub fn add_byte(&mut self, x: u8, kk:u8){
-        self.generalPurpose[x as usize] = self.generalPurpose[x as usize] + kk;
+        self.general_purpose[x as usize] = self.general_purpose[x as usize] + kk;
     }
 
 
     pub fn load_sprite(&mut self, x: u8, y:u8, n: u8) -> () {
-        let collision : bool = false;
+        self.vf = false;
         for x in 1..3{
             for y in 1..8{
-
+                
 
 
 
@@ -264,107 +277,122 @@ impl Chip8State {
     }
 
     pub fn store_to_memory(&mut self, x: u8) -> () {
-        for i in 0..self.generalPurpose[x as usize]{
-            self.memory[(self.I + i as u16) as usize] = self.generalPurpose[i as usize];
+        for i in 0..x+1{
+            self.memory[(self.i + i as u16) as usize] = self.general_purpose[i as usize];
         }
     }
 
     pub fn load_from_memory(&mut self, x: u8){
-        for i in 0..self.generalPurpose[x as usize]{
-            let i_ =(self.I + i as u16);
-            self.generalPurpose[i as usize] =  self.memory[i_ as usize];
+        for j in 0..x+1{
+            let i_ =self.i + j as u16;
+            self.general_purpose[j as usize] =  self.memory[i_ as usize];
         }
     }
 
     pub fn load_adress(&mut self, x:u8, y:u8) -> () {
-        self.I = (256 * x as u16 + y as u16) as u16;
+        self.i = (256 * x as u16 + y as u16) as u16;
     }
 
     pub fn load(&mut self, x: u8, y: u8) -> () {
-        self.I = (256 * x as u16 + y as u16) as u16; //TODO check with load_adress
+        let x_ :u8 = get_lower(x);
+        self.i = (256 * x_ as u16 + y as u16) as u16; //TODO check with load_adress
     }
 
-    pub fn load_Rom(&mut self) -> () {
+    pub fn load_rom(&mut self) -> () {
         //start at 0x200, then copy everything into memory
     }
 
     pub fn random(&mut self, x: u8, kk: u8){
-        let n:u8 = 12; //TODO random
-        self.generalPurpose[x as usize] = n & kk;
+        let mut rng = rand::thread_rng();
+        let n: u8 = rng.gen();
+        self.general_purpose[x as usize] = n & kk;
     }
 
     pub fn or(&mut self, x: u8, y:u8){
-        self.generalPurpose[x as usize] = self.generalPurpose[x as usize] | self.generalPurpose[y as usize]
+        self.general_purpose[x as usize] = self.general_purpose[x as usize] | self.general_purpose[y as usize]
     }
 
     pub fn shift_right(&mut self, x: u8){
-        if self.generalPurpose[x as usize] & 0b00000001 > 0{
-            self.VF = true;
+        if self.general_purpose[x as usize] & 0b00000001 > 0{
+            self.vf = true;
+        } else {
+            self.vf = false;
         }
-        self.generalPurpose[x as usize] = self.generalPurpose[x as usize] / 2
+        self.general_purpose[x as usize] = self.general_purpose[x as usize] >> 2;
     }
     pub fn shift_left(&mut self, x: u8){
-        if self.generalPurpose[x as usize] & 0b10000000 > 0{
-            self.VF = true;
+        if self.general_purpose[x as usize] & 0b10000000 > 0{
+            self.vf = true;
+        } else{
+            self.vf = false;
         }
-        self.generalPurpose[x as usize] = self.generalPurpose[x as usize] * 2
-    }
-    pub fn subtract(&mut self, x: u8, y:u8){
-        if self.generalPurpose[x as usize] > self.generalPurpose[y as usize]{
-            self.VF = true;
-        }
-        self.generalPurpose[x as usize] = self.generalPurpose[x as usize] - self.generalPurpose[y as usize];
-    }
-    pub fn subtract_not(&mut self, x: u8, y:u8){
-        if self.generalPurpose[y as usize] > self.generalPurpose[x as usize]{
-            self.VF = true;
-        }
-        self.generalPurpose[x as usize] = self.generalPurpose[x as usize] - self.generalPurpose[y as usize];
-
+        self.general_purpose[x as usize] = self.general_purpose[x as usize] << 1;
     }
     pub fn load_f_vx(&mut self, x: u8) -> (){
         //load sprite
     }
 
     pub fn load_b_vx(&mut self, x: u8)-> (){
-        //load sprite
+        let val: u8 = self.general_purpose[x as usize];
+        let hundreds = val / 100;
+        let tens :u8 = (val % 100) / 10;
+        let ones : u8 = (val % 10);
+        self.memory[self.i as usize] = hundreds;
+        self.memory[(self.i + 1) as usize] = tens;
+        self.memory[(self.i + 2) as usize] = ones;
+
     }
 
     pub fn and(&mut self, x: u8, y:u8) -> (){
         let x_: usize = x as usize;
         let y_: usize = y as usize;
-        self.generalPurpose[x_] = self.generalPurpose[y_] & self.generalPurpose[x_];
+        self.general_purpose[x_] = self.general_purpose[y_] & self.general_purpose[x_];
 
     }
 
     pub fn xor(&mut self, x: u8, y:u8) -> (){
         let x_: usize = x as usize;
         let y_: usize = y as usize;
-        self.generalPurpose[x_] = self.generalPurpose[y_] ^ self.generalPurpose[x_];
+        self.general_purpose[x_] = self.general_purpose[y_] ^ self.general_purpose[x_];
 
     }
 
     pub fn sub(&mut self, x: u8, y:u8) -> (){ //TODO
         let x_: usize = x as usize;
         let y_: usize = y as usize;
-        self.generalPurpose[x_] = self.generalPurpose[y_] ^ self.generalPurpose[x_];
+        if self.general_purpose[x as usize] > self.general_purpose[y as usize]{
+            self.vf = true;
+        } else { self.vf = false; }
+        if (self.general_purpose[y_] >= self.general_purpose[x_]){
+            self.general_purpose[x_] = 0;
+        }else {
+            self.general_purpose[x_] = self.general_purpose[x_] - self.general_purpose[y_];
+        }
 
     }
 
     pub fn subn(&mut self, x: u8, y:u8) -> (){ //TODO
         let x_: usize = x as usize;
         let y_: usize = y as usize;
-        self.generalPurpose[x_] = self.generalPurpose[y_] ^ self.generalPurpose[x_];
+        if self.general_purpose[x_] < self.general_purpose[y_]{
+            self.vf = true;
+        }
+        else{self.vf = false;}
 
+        if (self.general_purpose[y_] >= self.general_purpose[x_]){
+            self.general_purpose[x_] = 0;
+        }else {
+            self.general_purpose[x_] = self.general_purpose[x_] - self.general_purpose[y_];
+        }
     }
 
     pub fn load_i_vx(&mut self, x: u8){
         //TODO
-        self.I = self.generalPurpose[x as usize] as u16;
+        self.i = self.general_purpose[x as usize] as u16;
     }
     pub fn load_vx_i(&mut self, x: u8){
         //TODO
-        self.generalPurpose[x as usize] = self.I as u8;
+        self.general_purpose[x as usize] = self.i as u8;
     }
 
 
@@ -387,10 +415,349 @@ struct ROM {
 
 #[cfg(test)]
 mod tests {
+    use crate::Chip8State;
+
     #[test]
     fn it_works() {
         assert_eq!(2 + 2, 4);
     }
+
+    #[test]
+    fn test_initial(){
+        let a = Chip8State::new();
+        assert_eq!(a.i, 0);
+
+
+
+    }
+    #[test]
+    fn test_add_i(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[5], 0);
+        a.i = 13;
+        a.general_purpose[5] = 8;
+        a.add_i(5);
+        assert_eq!(a.i, 21);
+    }
+
+    #[test]
+    fn test_add(){
+        let mut a = Chip8State::new();
+        a.general_purpose[3] = 13;
+        a.general_purpose[5] = 8;
+        a.add(5, 3);
+        assert_eq!(a.general_purpose[5], 21);
+    }
+
+    #[test]
+    fn test_add_overflow(){
+        let mut a = Chip8State::new();
+        a.general_purpose[3] = 0xFF;
+        a.general_purpose[5] = 0xFF;
+        a.add(5, 3);
+        assert_eq!(a.vf, true);
+    }
+
+    #[test]
+    fn test_add_kk(){
+        let mut a = Chip8State::new();
+        a.general_purpose[3] = 13;
+        a.general_purpose[5] = 8;
+        a.add_byte(5, 18);
+        assert_eq!(a.general_purpose[5], 26);
+    }
+
+    #[test]
+    fn test_call(){
+        let mut a = Chip8State::new();
+        let stack_pointer: u8 = a.sp;
+        let h:u8 = 0xFE;
+        let l:u8 = 0xBC;
+        a.call(l,h);
+        assert_eq!(a.pc, 0x0EBC);
+        assert_eq!(a.sp, stack_pointer +1);
+
+    }
+
+    #[test]
+    fn test_jump(){
+        let mut a = Chip8State::new();
+        let h:u8 = 0xFE;
+        let l:u8 = 0xBC;
+        a.call(l,h);
+        assert_eq!(a.pc, 0x0EBC);
+
+    }
+
+
+    #[test]
+    fn test_ret(){
+        let mut a = Chip8State::new();
+        a.sp = 10;
+        a.memory[10] = 3;
+        a.ret();
+        assert_eq!(a.pc, 3);
+        assert_eq!(a.sp, 9);
+    }
+
+    #[test]
+    fn test_skip_equal(){
+        let mut a = Chip8State::new();
+        a.sp = 10;
+        a.memory[10] = 3;
+        a.pc = 3;
+        a.general_purpose[7] = 123;
+        a.skip_equal(7, 123);
+        assert_eq!(a.pc, 5);
+        a.skip_equal(9, 123);
+        assert_eq!(a.pc, 5);
+
+
+    }
+
+    #[test]
+    fn test_skip_not_equal(){
+        let mut a = Chip8State::new();
+        a.sp = 10;
+        a.memory[10] = 3;
+        a.pc = 3;
+        a.general_purpose[7] = 123;
+        a.skip_not_equal(7, 123);
+        assert_eq!(a.pc, 3);
+        a.skip_not_equal(9, 123);
+        assert_eq!(a.pc, 5);
+
+
+    }
+
+
+    #[test]
+    fn test_skip_vequal(){
+        let mut a = Chip8State::new();
+        a.sp = 10;
+        a.memory[10] = 3;
+        a.pc = 3;
+        a.general_purpose[7] = 123;
+        a.general_purpose[6] = 123;
+        a.general_purpose[5] = 124;
+        a.skip_v_equal(7, 6);
+        assert_eq!(a.pc, 5);
+        a.skip_v_equal(7, 5);
+        assert_eq!(a.pc, 5);
+
+
+    }
+
+    #[test]
+    fn test_load_kk(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[5], 0);
+        a.load_vx(5, 123);
+        assert_eq!(a.general_purpose[5], 123);
+    }
+
+    #[test]
+    fn test_load_vx_vy(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[5], 0);
+        a.general_purpose[3] = 18;
+        a.load_vx_vy(5, 3);
+        assert_eq!(a.general_purpose[5], 18);
+    }
+
+    #[test]
+    fn test_or(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[5], 0);
+        a.general_purpose[3] = 0b10010001;
+        a.general_purpose[5] = 0b01100101;
+        a.or(5, 3);
+        assert_eq!(a.general_purpose[5], 0b11110101);
+    }
+
+    #[test]
+    fn test_xor(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[5], 0);
+        a.general_purpose[3] = 0b10010101;
+        a.general_purpose[5] = 0b01100101;
+        a.xor(5, 3);
+        assert_eq!(a.general_purpose[5], 0b11110000);
+    }
+
+    #[test]
+    fn test_and(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[5], 0);
+        a.general_purpose[3] = 0b10010101;
+        a.general_purpose[5] = 0b11100101;
+        a.and(5, 3);
+        assert_eq!(a.general_purpose[5], 0b10000101);
+    }
+
+
+    #[test]
+    fn test_rand(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[5], 0);
+        a.general_purpose[3] = 13;
+        a.general_purpose[5] = 2;
+        a.random(5, 0);
+        assert_eq!(a.general_purpose[5], 0);
+    }
+
+    #[test]
+    fn test_shl(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[3], 0);
+        a.general_purpose[3] = 13;
+        a.shift_left(3);
+        assert_eq!(a.general_purpose[3], 26);
+        a.general_purpose[1] = 0b11111111;
+        a.shift_left(1);
+        assert_eq!(a.vf, true)
+    }
+
+    #[test]
+    fn test_load_address(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[3], 0);
+        a.i = 0;
+        let x: u8 = 0xFA;
+        let y: u8 = 0xCB;
+        a.load(x,y);
+        assert_eq!(a.i, 0x0ACB)
+
+    }
+
+    #[test]
+    fn test_set_dt(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.dt, 0);
+        a.general_purpose[8] = 8;
+        a.load_to_dt(8);
+        assert_eq!(a.dt, 8);
+    }
+
+    #[test]
+    fn test_load_from_dt(){
+        let mut a = Chip8State::new();
+        assert_eq!(a.general_purpose[3], 0);
+        assert_eq!(a.dt, 0);
+        a.general_purpose[8] = 8;
+        a.load_to_dt(8);
+        assert_eq!(a.dt, 8);
+        a.load_from_dt(3);
+        assert_eq!(a.general_purpose[3], 8);
+    }
+
+    #[test]
+    fn test_set_st(){
+        let mut a = Chip8State::new();
+        a.general_purpose[3] = 12;
+        a.load_to_st(3);
+        assert_eq!(a.st, 12);
+
+    }
+
+    #[test]
+    fn test_load_from_st(){
+        let mut a = Chip8State::new();
+        a.general_purpose[3] = 12;
+        a.load_to_st(3);
+        assert_eq!(a.st, 12);
+        a.load_from_st(4);
+        assert_eq!(a.general_purpose[4], 12);
+
+    }
+
+    #[test]
+    fn test_load_memory(){
+        let mut a = Chip8State::new();
+        a.general_purpose[0] = 1;
+        a.general_purpose[1] = 1;
+        a.general_purpose[2] = 1;
+        a.general_purpose[3] = 1;
+        a.memory[257] = 2;
+        a.memory[258] = 2;
+        a.memory[259] = 2;
+        a.i = 257;
+        a.load_from_memory(2);
+        assert_eq!(a.general_purpose[0],2);
+        assert_eq!(a.general_purpose[1],2);
+        assert_eq!(a.general_purpose[2],2);
+        assert_eq!(a.general_purpose[3],1);
+
+
+    }
+
+    #[test]
+    fn test_store_to_memory(){
+        let mut a = Chip8State::new();
+        a.general_purpose[0] = 1;
+        a.general_purpose[1] = 1;
+        a.general_purpose[2] = 1;
+        a.general_purpose[3] = 1;
+        a.memory[257] = 2;
+        a.memory[258] = 2;
+        a.memory[259] = 2;
+        a.memory[260] = 2;
+        a.i = 257;
+        a.store_to_memory(2);
+        assert_eq!(a.memory[257],1);
+        assert_eq!(a.memory[258],1);
+        assert_eq!(a.memory[259],1);
+        assert_eq!(a.memory[260],2);
+
+    }
+
+    #[test]
+    fn test_store_binary_to_memory(){
+        let mut a = Chip8State::new();
+        a.general_purpose[4] = 135;
+        a.memory[257] = 2;
+        a.memory[258] = 2;
+        a.memory[259] = 2;
+        a.memory[260] = 2;
+        a.i = 257;
+        a.load_b_vx(4);
+        assert_eq!(a.memory[257],1);
+        assert_eq!(a.memory[258],3);
+        assert_eq!(a.memory[259],5);
+        assert_eq!(a.memory[260],2);
+
+    }
+
+    #[test]
+    fn test_subtract(){
+        let mut a = Chip8State::new();
+        a.general_purpose[4] = 135;
+        a.general_purpose[3] = 12;
+        a.general_purpose[5] = 18;
+        a.sub(5,3);
+        assert_eq!(a.general_purpose[5], 6);
+        assert_eq!(a.vf, true);
+        a.sub(3,4);
+        assert_eq!(a.general_purpose[3], 0);
+        assert_eq!(a.vf, false)
+
+    }
+
+    #[test]
+    fn test_subtract_not(){
+        let mut a = Chip8State::new();
+        a.general_purpose[4] = 135;
+        a.general_purpose[3] = 12;
+        a.general_purpose[5] = 18;
+        a.subn(5,3);
+        assert_eq!(a.general_purpose[5], 6);
+        assert_eq!(a.vf, false);
+        a.subn(3,4);
+        assert_eq!(a.general_purpose[3], 0);
+        assert_eq!(a.vf, true)
+
+    }
+
 
 
 
