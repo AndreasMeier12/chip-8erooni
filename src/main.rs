@@ -13,6 +13,8 @@ use std::path::Path;
 use sdl2::pixels::Color;
 use sdl2::render::{Canvas, WindowCanvas};
 use std::fs;
+use std::fs::File;
+use std::io::Read;
 
 const PIXEL_EMBIGGENING: u32 = 8;
 const CHIP_8_WIDTH: u32 = 64;
@@ -25,7 +27,8 @@ pub fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
 
-    let filename = "asdf.ch8";
+
+    let path = "testcases/test_opcode.ch8";
 
 
     let window = video_subsystem
@@ -37,7 +40,9 @@ pub fn main() -> Result<(), String> {
 
     let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
     let mut state: Chip8State = Chip8State::new();
-    state.example_screen();
+    let path: &Path = Path::new("./testcases/test_opcode.ch8");
+    let rom = read_in_rom(path);
+    state.load_rom(rom);
 
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
@@ -113,6 +118,15 @@ pub fn get_highest(a: u8) -> u8 {
 
 pub fn get_lowest(a: u8) -> u8 {
     a & 0b00000001
+}
+
+
+pub fn read_in_rom(path: &Path) -> Vec<u8> {
+    let mut file = File::open(path).expect("File not found");
+    let metadata = fs::metadata(&path).expect("unable to read metadata");
+    let mut buffer = vec![0; metadata.len() as usize];
+    file.read(&mut buffer).expect("buffer overflow");
+    buffer
 }
 
 
@@ -398,8 +412,12 @@ impl Chip8State {
         self.i = (256 * x_ as u16 + y as u16) as u16; //TODO check with load_adress
     }
 
-    pub fn load_rom(&mut self) -> () {
+    pub fn load_rom(&mut self, rom: Vec<u8>) -> () {
         //start at 0x200, then copy everything into memory
+        for i in 0x200..(0x200 + rom.len() - 1) {
+            self.memory[i] = rom[i - 0x200];
+        }
+        self.pc = 0x200;
     }
 
     pub fn random(&mut self, x: u8, kk: u8) {
