@@ -163,6 +163,7 @@ struct Chip8State {
     vf: bool,
     i: u16,
     screen: Vec<bool>,
+    stack: Vec<u16>
 }
 
 impl Chip8State {
@@ -177,6 +178,7 @@ impl Chip8State {
             vf: false,
             i: 0,
             screen: vec![false; 2048],
+            stack: vec![0; 16],
         }
     }
 
@@ -267,7 +269,7 @@ impl Chip8State {
     }
 
     pub fn ret(&mut self) -> () {
-        self.pc = self.memory[self.sp as usize] as u16;
+        self.pc = self.stack[self.sp as usize] as u16;
         self.sp = self.sp - 1;
     }
 
@@ -291,7 +293,7 @@ impl Chip8State {
         let new_address: u16 = 256 * (get_lower(h_) as u16) + l as u16;
         println!("{}", 256 * (get_lower(h_) as u16));
         self.sp = self.sp + 1;
-        self.memory[self.sp as usize] = self.pc as u8;
+        self.stack[self.sp as usize] = self.pc;
         self.pc = new_address as u16;
     }
 
